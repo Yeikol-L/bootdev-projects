@@ -1,4 +1,4 @@
-package video
+package helper
 
 import (
 	"testing"
@@ -18,7 +18,7 @@ func TestSimpli(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		n, d := simpli(tt.n, tt.d)
+		n, d := aspect(tt.n, tt.d)
 		t.Logf("From %d/%d to %d/%d", tt.n, tt.d, n, d)
 		if n != tt.wantN || d != tt.wantD {
 			t.Errorf("simpli(%d, %d) = %d/%d, want %d/%d",

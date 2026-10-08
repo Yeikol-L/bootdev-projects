@@ -1,14 +1,13 @@
-package video
+package helper
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os/exec"
 )
 
-type CommandResult struct {
+type MetadataCommandResult struct {
 	Streams []struct {
 		Index              int    `json:"index"`
 		CodecName          string `json:"codec_name,omitempty"`
@@ -83,16 +82,16 @@ type CommandResult struct {
 	} `json:"streams"`
 }
 
-func getVideoAspectRatio(filePath string) (string, error) {
+func GetVideoAspectRatio(filePath string) (string, error) {
 	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
-	buffer := bytes.NewBuffer([]byte{})
+	buffer := new(bytes.Buffer)
 	cmd.Stdout = buffer
 	err := cmd.Run()
 	if err != nil {
 		return "", err
 	}
-	var result CommandResult
-	err = json.Unmarshal(buffer.Bytes(), result)
+	var result MetadataCommandResult
+	err = json.Unmarshal(buffer.Bytes(), &result)
 	if err != nil {
 		return "", err
 	}
@@ -101,29 +100,54 @@ func getVideoAspectRatio(filePath string) (string, error) {
 	}
 	width := result.Streams[0].Width
 	height := result.Streams[0].Height
-	fmt.Println(width)
-	fmt.Println(height)
-	return "", nil
+	n, d := aspect(width, height)
+	if n == 16 && d == 9 {
+		return "16:9", nil
+	}
+	if n == 9 && d == 16 {
+		return "9:16", nil
+	}
+	return "other", nil
+}
+func ProcessVideoFortFastStart(filePath string) (string, error) {
+	tempFilePath := filePath + ".procesessing"
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", tempFilePath)
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+	return tempFilePath, nil
+}
+func aspect(n, d int) (int, int) {
+	n1 := n / 16
+	if d/n1 == 9 {
+		return 16, 9
+	}
+	n1 = n / 9
+	if d/n1 == 16 {
+		return 9, 16
+	}
+	return 0, 0
 }
 
-func gcd(a, b int) int {
-	for b != 0 {
-		a, b = b, a%b
-	}
-	if a < 0 {
-		return -a
-	}
-	return a
-}
+// func gcd(a, b int) int {
+// 	for b != 0 {
+// 		a, b = b, a%b
+// 	}
+// 	if a < 0 {
+// 		return -a
+// 	}
+// 	return a
+// }
 
-func simpli(n, d int) (int, int) {
-	g := gcd(n, d)
-	if g == 0 {
-		return n, d // 0/0
-	}
-	n, d = n/g, d/g
-	if d < 0 { // signo en el numerador
-		n, d = -n, -d
-	}
-	return n, d
-}
+// func aspect(n, d int) (int, int) {
+// 	g := gcd(n, d)
+// 	if g == 0 {
+// 		return n, d // 0/0
+// 	}
+// 	n, d = n/g, d/g
+// 	if d < 0 { // signo en el numerador
+// 		n, d = -n, -d
+// 	}
+// 	return n, d
+// }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
+	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/helper"
 	"github.com/google/uuid"
 )
 
@@ -42,14 +43,14 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	const uploadLimit = 1 << 30
 	r.ParseMultipartForm(uploadLimit)
-	file, fileHeaders, err := r.FormFile("video")
+	formFile, fileHeaders, err := r.FormFile("video")
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not parse the video", nil)
 		return
 	}
 	mediaType, _, err := mime.ParseMediaType(fileHeaders.Header.Get("Content-Type"))
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not parse the video", nil)
+		respondWithError(w, http.StatusInternalServerError, "Could not parse the video", err)
 		return
 	}
 	if mediaType != "video/mp4" {
@@ -58,21 +59,44 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	tempFile, err := os.CreateTemp("", "tubely-upload.mp4")
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not parse the video", nil)
+		respondWithError(w, http.StatusInternalServerError, "Could not parse the video", err)
 		return
 	}
-	_, err = io.Copy(tempFile, file)
+	_, err = io.Copy(tempFile, formFile)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not parse the video", nil)
+		respondWithError(w, http.StatusInternalServerError, "Could not parse the video", err)
 		return
 	}
-	tempFile.Seek(0, io.SeekStart)
-	objectKey := rand32String() + ".mp4"
+	fmt.Println(tempFile.Name())
+	processedPath, err := helper.ProcessVideoFortFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not process the video", err)
+		return
+	}
+	processedFile, err := os.OpenFile(processedPath, os.O_RDWR, os.ModePerm)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not open process the video", err)
+		return
+	}
+
+	aspec, err := helper.GetVideoAspectRatio(tempFile.Name())
+	filePrefix := "other"
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not upload the video", err)
+		return
+	}
+	if aspec == "16:9" {
+		filePrefix = "landscape"
+	}
+	if aspec == "9:16" {
+		filePrefix = "portrait"
+	}
+	objectKey := fmt.Sprintf("%s/%s.mp4", filePrefix, rand32String())
 
 	objectInput := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &objectKey,
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: &mediaType,
 	}
 	_, err = cfg.s3Client.PutObject(r.Context(), &objectInput)
@@ -80,7 +104,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Could not upload the video", nil)
 		return
 	}
-	videoUrl := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, objectKey)
+	videoUrl := fmt.Sprintf("https://%s/%s", cfg.s3CfDistribution, objectKey)
 	video.VideoURL = &videoUrl
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
@@ -90,8 +114,10 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	respondWithJSON(w, http.StatusOK, nil)
 	defer func() {
 		tempFile.Close()
+		processedFile.Close()
 		os.Remove(tempFile.Name())
-		file.Close()
+		os.Remove(processedFile.Name())
+		formFile.Close()
 	}()
 
 }
