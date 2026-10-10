@@ -10,6 +10,7 @@ import (
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/auth/mfa"
+	"github.com/bootdotdev/learn-web-security/internal/auth/passwords"
 	"github.com/bootdotdev/learn-web-security/internal/auth/sessions"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
@@ -77,6 +78,15 @@ func (handler *Handler) UpdateEmail(responseWriter http.ResponseWriter, request 
 		return
 	}
 	email, emailErr := httpx.FormValue(request, "email")
+	currentPassowrd, currentPasswordErr := httpx.FormValue(request, "currentPassword")
+	if currentPasswordErr != nil {
+		handler.errorPage(responseWriter, http.StatusForbidden, "Invalid Request", "Re-enter your current password to change your email.")
+		return
+	}
+	if !passwords.Verify(currentPassowrd, current.User.PasswordHash) {
+		handler.errorPage(responseWriter, http.StatusForbidden, "Invalid Request", "Re-enter your current password to change your email.")
+		return
+	}
 	if emailErr != nil {
 		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid.")
 		return

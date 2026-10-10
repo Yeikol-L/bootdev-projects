@@ -68,6 +68,10 @@ func (handler *Handler) Detail(responseWriter http.ResponseWriter, request *http
 		return
 	}
 	order, found, err := handler.orderStore.FindByID(request.Context(), orderID)
+	if order.UserID != current.User.ID {
+		handler.orderNotFound(responseWriter)
+		return
+	}
 	if err != nil {
 		handler.internalError(responseWriter, request, err)
 		return

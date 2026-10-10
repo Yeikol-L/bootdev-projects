@@ -86,8 +86,15 @@ func (handler *Handler) Upload(responseWriter http.ResponseWriter, request *http
 	http.Redirect(responseWriter, request, "/account/tax-exemption", http.StatusFound)
 }
 
+func canDownload(file File, user accounts.User) bool {
+	if user.Role == "admin" || user.Role == "support" {
+		return true
+	}
+	return file.UserID == user.ID
+}
+
 func (handler *Handler) Download(responseWriter http.ResponseWriter, request *http.Request) {
-	_, ok := handler.requireAuth(responseWriter, request)
+	currentSession, ok := handler.requireAuth(responseWriter, request)
 	if !ok {
 		return
 	}
@@ -101,7 +108,8 @@ func (handler *Handler) Download(responseWriter http.ResponseWriter, request *ht
 		handler.internalError(responseWriter, request, err)
 		return
 	}
-	if !found {
+
+	if !found || !canDownload(file, currentSession.User) {
 		handler.fileNotFound(responseWriter)
 		return
 	}
