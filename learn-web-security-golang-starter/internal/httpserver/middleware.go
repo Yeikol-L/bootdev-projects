@@ -9,6 +9,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,18 +30,51 @@ func applyMiddleware(handler http.Handler, middlewareChain ...middleware) http.H
 	return handler
 }
 
-func permissiveCORS(next http.Handler) http.Handler {
+func setContentSecurityPolicy(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		csp := httpx.CSPNonce(r.Context())
+		w.Header().Set("Content-Security-Policy", fmt.Sprintf("default-src 'self' 'nonce-%s'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'", csp))
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+var OriginHeader = "Origin"
+var OriginHeaderFallback = "Referer"
+
+func sourceValidation(appOrigin string, renderer *templates.Renderer) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			originHeaderValue := r.Header.Get(OriginHeader)
+			refererHeaderValue := r.Header.Get(OriginHeaderFallback)
+			requestOrigin := originHeaderValue
+			if originHeaderValue == "" {
+				if url, err := url.Parse(refererHeaderValue); err == nil {
+					requestOrigin = fmt.Sprintf("%s://%s", url.Scheme, url.Host)
+				}
+			}
+			fmt.Println("Request -----")
+			fmt.Println("Origin: " + originHeaderValue)
+			fmt.Println("Referer: " + refererHeaderValue)
+			fmt.Println("Request Origin: " + requestOrigin)
+			if requestOrigin != appOrigin {
+				httpx.RespondWithErrorPage(w, renderer, http.StatusForbidden, "Not allowed", "Please use the oficial domain")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func productCors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		if origin := request.Header.Get("Origin"); origin != "" {
-			responseWriter.Header().Set("Access-Control-Allow-Origin", origin)
-			responseWriter.Header().Set("Access-Control-Allow-Credentials", "true")
-			responseWriter.Header().Set("Vary", "Origin")
-		}
-		if request.Method == http.MethodOptions {
-			responseWriter.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			responseWriter.Header().Set("Access-Control-Allow-Headers", request.Header.Get("Access-Control-Request-Headers"))
-			responseWriter.WriteHeader(http.StatusNoContent)
-			return
+		if request.Method == "GET" && request.URL.Path == "/api/products" {
+			responseWriter.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		next.ServeHTTP(responseWriter, request)
 	})
