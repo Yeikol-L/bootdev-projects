@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -43,11 +46,15 @@ type AttackerLabConfig struct {
 }
 
 func Load(workingDirectory string) (Config, error) {
-	return Parse(processEnvironment(), workingDirectory)
+	envMap, _ := godotenv.Read(".env")
+	maps.Copy(envMap, processEnvironment())
+	return Parse(envMap, workingDirectory)
 }
 
 func LoadAttackerLab(workingDirectory string) (AttackerLabConfig, error) {
-	return ParseAttackerLab(processEnvironment())
+	envMap, _ := godotenv.Read(".env")
+	maps.Copy(envMap, processEnvironment())
+	return ParseAttackerLab(envMap)
 }
 
 func Parse(environment map[string]string, workingDirectory string) (Config, error) {
@@ -67,7 +74,18 @@ func Parse(environment map[string]string, workingDirectory string) (Config, erro
 	if err != nil {
 		return Config{}, err
 	}
-
+	pawpalApiKey, err := getRequiredEnv(environment, "PAWPAL_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	downloadSigningKeyStr, err := getRequiredEnv(environment, "DOWNLOAD_SIGNING_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	downloadSigningKey, err := parseEncryptionKey(downloadSigningKeyStr, "DOWNLOAD_SIGNING_KEY")
+	if err != nil {
+		return Config{}, err
+	}
 	activeEncryptionKeyVersion, encryptionKeys, err := parseOptionalEncryptionKeys(environment)
 	if err != nil {
 		return Config{}, err
@@ -79,7 +97,7 @@ func Parse(environment map[string]string, workingDirectory string) (Config, erro
 	}
 
 	return Config{
-		PawPalAPIKey:               "bs_test_pawpal_starter_key",
+		PawPalAPIKey:               pawpalApiKey,
 		AppOrigin:                  appOrigin,
 		Port:                       port,
 		DatabasePath:               databasePath,
@@ -219,4 +237,11 @@ func normalizeEncryptionVersion(version string) (string, error) {
 		}
 	}
 	return normalized, nil
+}
+
+func getRequiredEnv(enviroment map[string]string, key string) (string, error) {
+	if value, found := enviroment[key]; found && value != "" {
+		return value, nil
+	}
+	return "", fmt.Errorf("Env variable %s obligatory", key)
 }

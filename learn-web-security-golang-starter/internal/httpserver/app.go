@@ -50,6 +50,7 @@ type Options struct {
 	FixtureDirectory        string
 	TemplateDirectory       string
 	PublicDirectory         string
+	DownloadSigningKey      string
 }
 
 type Application struct {
