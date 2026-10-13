@@ -30,16 +30,6 @@ func applyMiddleware(handler http.Handler, middlewareChain ...middleware) http.H
 	return handler
 }
 
-func setContentSecurityPolicy(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		csp := httpx.CSPNonce(r.Context())
-		w.Header().Set("Content-Security-Policy", fmt.Sprintf("default-src 'self' 'nonce-%s'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'", csp))
-		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		next.ServeHTTP(w, r)
-	})
-}
-
 var OriginHeader = "Origin"
 var OriginHeaderFallback = "Referer"
 
@@ -58,10 +48,6 @@ func sourceValidation(appOrigin string, renderer *templates.Renderer) func(next 
 					requestOrigin = fmt.Sprintf("%s://%s", url.Scheme, url.Host)
 				}
 			}
-			fmt.Println("Request -----")
-			fmt.Println("Origin: " + originHeaderValue)
-			fmt.Println("Referer: " + refererHeaderValue)
-			fmt.Println("Request Origin: " + requestOrigin)
 			if requestOrigin != appOrigin {
 				httpx.RespondWithErrorPage(w, renderer, http.StatusForbidden, "Not allowed", "Please use the oficial domain")
 				return
@@ -79,23 +65,36 @@ func productCors(next http.Handler) http.Handler {
 		next.ServeHTTP(responseWriter, request)
 	})
 }
-func setContentTypeOptions(next http.Handler) http.Handler {
+
+func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nonceBytes := make([]byte, 16)
+		if _, err := rand.Read(nonceBytes); err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		nonce := base64.StdEncoding.EncodeToString(nonceBytes)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Content-Security-Policy", fmt.Sprintf("default-src 'self' 'nonce-%s'; script-src 'self' 'nonce-%s'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'", nonce, nonce))
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+		w.Header().Set("Origin-Agent-Cluster", "?1")
+		w.Header().Set("X-DNS-Prefetch-Control", "off")
+		w.Header().Set("X-Download-Options", "noopen")
+		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+		w.Header().Set("X-XSS-Protection", "0")
+
+		r = r.WithContext(httpx.WithCSPNonce(r.Context(), nonce))
 		next.ServeHTTP(w, r)
 	})
 }
 
-func cspNonce(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		nonceBytes := make([]byte, 16)
-		if _, err := rand.Read(nonceBytes); err != nil {
-			http.Error(responseWriter, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		nonce := base64.StdEncoding.EncodeToString(nonceBytes)
-		request = request.WithContext(httpx.WithCSPNonce(request.Context(), nonce))
-		next.ServeHTTP(responseWriter, request)
+func overrideCrosOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		next.ServeHTTP(w, r)
 	})
 }
 
