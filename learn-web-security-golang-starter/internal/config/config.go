@@ -38,6 +38,8 @@ type Config struct {
 	MaxUploadBytes             int64
 	MaxPublicProductResults    int
 	ActiveEncryptionKeyVersion string
+	DownloadSigningKey         [32]byte
+	TrustedProxyHops           int
 	EncryptionKeys             map[string][32]byte
 }
 
@@ -46,13 +48,13 @@ type AttackerLabConfig struct {
 }
 
 func Load(workingDirectory string) (Config, error) {
-	envMap, _ := godotenv.Read(".env")
+	envMap, _ := godotenv.Read(workingDirectory + "/.env")
 	maps.Copy(envMap, processEnvironment())
 	return Parse(envMap, workingDirectory)
 }
 
 func LoadAttackerLab(workingDirectory string) (AttackerLabConfig, error) {
-	envMap, _ := godotenv.Read(".env")
+	envMap, _ := godotenv.Read(workingDirectory + "/.env")
 	maps.Copy(envMap, processEnvironment())
 	return ParseAttackerLab(envMap)
 }
@@ -86,6 +88,10 @@ func Parse(environment map[string]string, workingDirectory string) (Config, erro
 	if err != nil {
 		return Config{}, err
 	}
+	trustProxyHops, err := parseNonNegativeInteger(valueOrDefault(environment, "TRUST_PROXY_HOPS", "0"), "TRUST_PROXY_HOPS")
+	if err != nil {
+		return Config{}, err
+	}
 	activeEncryptionKeyVersion, encryptionKeys, err := parseOptionalEncryptionKeys(environment)
 	if err != nil {
 		return Config{}, err
@@ -107,6 +113,8 @@ func Parse(environment map[string]string, workingDirectory string) (Config, erro
 		MaxPublicProductResults:    MaxPublicProductResults,
 		ActiveEncryptionKeyVersion: activeEncryptionKeyVersion,
 		EncryptionKeys:             encryptionKeys,
+		DownloadSigningKey:         downloadSigningKey,
+		TrustedProxyHops:           trustProxyHops,
 	}, nil
 }
 

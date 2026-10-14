@@ -5,7 +5,7 @@
 {
   "lsp": {
     "gopls": {
-      "binary": { "path": "/Users/yeikollorenzo/go/bin/gopls" }
+      "binary": { "path": "/home/yeikol/go/bin/gopls" }
     }
   }
 }

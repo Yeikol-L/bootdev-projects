@@ -1,0 +1,14 @@
+# Secretos y VCS
+.git/
+.env
+.env.*
+*.pem
+*.key
+
+# Temporales y logs
+tmp/
+*.log
+
+# Data generada en runtime
+data/
+!data/uploads/mystery-shack-tax-exemption.pdf
