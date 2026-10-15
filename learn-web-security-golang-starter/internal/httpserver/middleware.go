@@ -124,10 +124,22 @@ func LoadShedder(_ int, _ int) func(http.Handler) http.Handler {
 	}
 }
 
-func SearchThrottle(_ *templates.Renderer) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return next
+func SearchThrottle(renderer *templates.Renderer) func(http.Handler) http.Handler {
+	opts := rateLimitOptions{
+		window:  time.Second,
+		maximum: 5,
+		key: func(r *http.Request) string {
+			return "SEARCH-CONSTAT"
+		},
+		onLimit: func(w http.ResponseWriter, r *http.Request, rls rateLimitState) {
+			// w.Header().Set("Retry-After", strconv.FormatInt(int64(rls.retryAfterSeconds), 10))
+			if renderErr := httpx.RespondWithErrorPage(w, renderer, http.StatusTooManyRequests, "Search Is Busy", "Try again shortly."); renderErr != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+		},
+		now: func() time.Time { return time.Now() },
 	}
+	return fixedWindowRateLimiter(opts)
 }
 
 type rateLimitCounter struct {
@@ -236,9 +248,19 @@ func (limiter *fixedWindowLimiter) reject(responseWriter http.ResponseWriter, re
 }
 
 func fixedWindowRateLimiter(options rateLimitOptions) middleware {
-	validateRateLimitOptions(options)
+	// validateRateLimitOptions(options)
+	limiter := newFixedWindowLimiter(options)
 	return func(next http.Handler) http.Handler {
-		return next
+		return http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				state, limited := limiter.consume(r)
+				if limited {
+					limiter.reject(w, r, state)
+					return
+				}
+				setRateLimitHeaders(w, state)
+				next.ServeHTTP(w, r)
+			})
 	}
 }
 

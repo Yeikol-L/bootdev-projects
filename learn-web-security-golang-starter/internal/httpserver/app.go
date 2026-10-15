@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bootdotdev/learn-web-security/internal/account"
@@ -99,7 +101,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		accountStore,
 		renderer,
 		logger,
-		unboundedPublicProductResults,
+		options.MaxPublicProductResults,
 	)
 	uploadHandler := uploads.NewHandler(
 		accountStore,
@@ -108,11 +110,11 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		logger,
 		options.EncryptionKeyring,
 		uploadDirectory,
-		defaultUploadBytes,
+		options.MaxUploadBytes,
 		options.DownloadSigningKey,
 	)
 	adminHandler := admin.NewHandler(admin.NewStore(database), accountStore, renderer, logger, imagepreview.NewService(), options.MaxUploadBytes)
-	apiHandler := api.NewHandler(accountStore, orderStore, productStore, api.NewStore(database), logger, unboundedPublicProductResults)
+	apiHandler := api.NewHandler(accountStore, orderStore, productStore, api.NewStore(database), logger, options.MaxPublicProductResults)
 	assistantHandler := assistant.NewHandler(accountStore, assistant.NewService(orderStore), renderer, logger)
 	supportHandler := support.NewHandler(
 		accountStore,
@@ -122,7 +124,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		logger,
 		options.EncryptionKeyring,
 		filepath.Join(options.DataDirectory, "bulk-tax-documents"),
-		defaultUploadBytes,
+		options.MaxUploadBytes,
 	)
 	authenticationHandler := newAuthHandler(accountStore, mfaStore, passwordResetStore, renderer, logger, options.AppOrigin)
 	passkeyHandler, err := passkeys.NewHandler(
@@ -137,13 +139,99 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 	if err != nil {
 		return nil, err
 	}
+	globalRateLimitOptions := rateLimitOptions{
+		window:  time.Minute,
+		maximum: 100,
+		key: func(r *http.Request) string {
+			ip := httpx.ClientIP(r, options.TrustedProxyHops, nil)
+			return ip
+		},
+		onLimit: func(w http.ResponseWriter, r *http.Request, rls rateLimitState) {
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write(nil)
+		},
+		now: func() time.Time { return time.Now() },
+	}
+	productsRateLimitOptions := rateLimitOptions{
+		window:  time.Minute,
+		maximum: 30,
+		key: func(r *http.Request) string {
+			ip := httpx.ClientIP(r, options.TrustedProxyHops, nil)
+			return ip
+		},
+		onLimit: func(w http.ResponseWriter, r *http.Request, rls rateLimitState) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte("{}"))
+		},
+		now: func() time.Time { return time.Now() },
+	}
+	loginRateLimiteOptions := rateLimitOptions{
+		window:  15 * time.Minute,
+		maximum: 20,
+		key: func(r *http.Request) string {
+			ip := httpx.ClientIP(r, options.TrustedProxyHops, nil)
+			return ip
+		},
+		onLimit: func(w http.ResponseWriter, r *http.Request, rls rateLimitState) {
+			w.Header().Add("Retry-After", strconv.FormatInt(int64(rls.retryAfterSeconds), 10))
+			if renderErr := httpx.RespondWithErrorPage(w, renderer, http.StatusTooManyRequests, "Muchos intentos", "Intente mas tarde"); renderErr != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+		},
+		now: func() time.Time { return time.Now() },
+	}
+	passwordResetRateLimiteOptions := rateLimitOptions{
+		window:  time.Hour,
+		maximum: 10,
+		key: func(r *http.Request) string {
+			ip := httpx.ClientIP(r, options.TrustedProxyHops, nil)
+			return ip
+		},
+		onLimit: func(w http.ResponseWriter, r *http.Request, rls rateLimitState) {
+			w.Header().Add("Retry-After", strconv.FormatInt(int64(rls.retryAfterSeconds), 10))
+			if renderErr := httpx.RespondWithErrorPage(w, renderer, http.StatusTooManyRequests, "Muchos intentos", "Intente mas tarde"); renderErr != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+		},
+		now: func() time.Time { return time.Now() },
+	}
+	loginAccountRateLimitOptions := rateLimitOptions{
+		window:  15 * time.Minute,
+		maximum: 5,
+		key: func(r *http.Request) string {
+			return strings.ToLower(strings.Trim(r.FormValue("email"), " "))
+		},
+		onLimit: func(w http.ResponseWriter, r *http.Request, rls rateLimitState) {
+			w.Header().Add("Retry-After", strconv.FormatInt(int64(rls.retryAfterSeconds), 10))
+			if renderErr := httpx.RespondWithErrorPage(w, renderer, http.StatusTooManyRequests, "Muchos intentos", "Intente mas tarde"); renderErr != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+		},
+		now: func() time.Time { return time.Now() },
+	}
+	passwordResetAccountRateLimitOptions := rateLimitOptions{
+		window:  time.Hour,
+		maximum: 3,
+		key: func(r *http.Request) string {
+			return strings.ToLower(strings.Trim(r.FormValue("email"), " "))
+		},
+		onLimit: func(w http.ResponseWriter, r *http.Request, rls rateLimitState) {
+			w.Header().Add("Retry-After", strconv.FormatInt(int64(rls.retryAfterSeconds), 10))
+			if renderErr := httpx.RespondWithErrorPage(w, renderer, http.StatusTooManyRequests, "Muchos intentos", "Intente mas tarde"); renderErr != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+		},
+		now: func() time.Time { return time.Now() },
+	}
+	globalRateLimiter := fixedWindowRateLimiter(globalRateLimitOptions)
 	dynamicMux := http.NewServeMux()
 	dynamicMux.HandleFunc("GET /{$}", storefrontHandler.Storefront)
-	dynamicMux.HandleFunc("GET /search", storefrontHandler.Search)
+	dynamicMux.Handle("GET /search", applyMiddleware(http.HandlerFunc(storefrontHandler.Search), SearchThrottle(renderer)))
 	dynamicMux.HandleFunc("GET /products/{id}", storefrontHandler.Product)
 	dynamicMux.HandleFunc("GET /api/account/orders", apiHandler.AccountOrders)
 	dynamicMux.HandleFunc("GET /api/orders/{id}", apiHandler.Order)
-	dynamicMux.HandleFunc("GET /api/products", apiHandler.Products)
+	dynamicMux.Handle("GET /api/products", fixedWindowRateLimiter(productsRateLimitOptions)(http.HandlerFunc(apiHandler.Products)))
 	dynamicMux.HandleFunc("OPTIONS /api/products", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET")
@@ -152,17 +240,34 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 	})
 	dynamicMux.HandleFunc("GET /api/integrations/warehouse/orders", apiHandler.WarehouseOrders)
 	dynamicMux.Handle("POST /products/{id}/reviews", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(reviewHandler.Create)))
-	dynamicMux.HandleFunc("GET /login", authenticationHandler.LoginPage)
-	dynamicMux.Handle("POST /login", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.Login)))
+	dynamicMux.Handle("GET /login", http.HandlerFunc(authenticationHandler.LoginPage))
+
+	dynamicMux.Handle("POST /login",
+		applyMiddleware(http.HandlerFunc(authenticationHandler.Login),
+			parseForm(options.MaxRequestBodyBytes, renderer),
+			fixedWindowRateLimiter(loginRateLimiteOptions),
+			fixedWindowRateLimiter(loginAccountRateLimitOptions),
+		))
 	dynamicMux.HandleFunc("GET /login/totp", authenticationHandler.TOTPLoginPage)
-	dynamicMux.Handle("POST /login/totp", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.TOTPLogin)))
+	dynamicMux.Handle("POST /login/totp",
+		applyMiddleware(
+			http.HandlerFunc(authenticationHandler.TOTPLogin),
+			parseForm(options.MaxRequestBodyBytes, renderer),
+			fixedWindowRateLimiter(loginRateLimiteOptions),
+		))
 	dynamicMux.HandleFunc("POST /login/totp/cancel", authenticationHandler.CancelTOTPLogin)
 	dynamicMux.HandleFunc("GET /signup", authenticationHandler.SignupPage)
 	dynamicMux.Handle("POST /signup", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.Signup)))
 	dynamicMux.HandleFunc("GET /recover-mfa", authenticationHandler.MFARecoveryPage)
 	dynamicMux.Handle("POST /recover-mfa", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.RecoverMFA)))
 	dynamicMux.HandleFunc("GET /password-reset", authenticationHandler.PasswordResetRequestPage)
-	dynamicMux.Handle("POST /password-reset", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.RequestPasswordReset)))
+	dynamicMux.Handle("POST /password-reset",
+		applyMiddleware(
+			http.HandlerFunc(authenticationHandler.RequestPasswordReset),
+			fixedWindowRateLimiter(passwordResetRateLimiteOptions),
+			parseForm(options.MaxRequestBodyBytes, renderer),
+			fixedWindowRateLimiter(passwordResetAccountRateLimitOptions),
+		))
 	dynamicMux.HandleFunc("GET /password-reset/{token}", authenticationHandler.PasswordResetPage)
 	dynamicMux.Handle("POST /password-reset/{token}", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.ResetPassword)))
 	dynamicMux.HandleFunc("POST /logout", authenticationHandler.Logout)
@@ -218,7 +323,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		}
 	})
 
-	dynamicHandler := sourceValidation(options.AppOrigin, renderer)(productCors(dynamicMux))
+	dynamicHandler := sourceValidation(options.AppOrigin, renderer)(globalRateLimiter(productCors(dynamicMux)))
 
 	mainMux := http.NewServeMux()
 	mainMux.HandleFunc("GET /health", func(responseWriter http.ResponseWriter, _ *http.Request) {

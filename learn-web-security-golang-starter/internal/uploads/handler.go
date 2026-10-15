@@ -164,18 +164,26 @@ func (handler *Handler) ImportedDownload(responseWriter http.ResponseWriter, req
 }
 
 var errUploadTooLarge = errors.New("document upload is too large")
+var errMultipleFiles = errors.New("More than one file oploaded")
 
 func (handler *Handler) readUpload(responseWriter http.ResponseWriter, request *http.Request) ([]byte, string, error) {
-	request.Body = http.MaxBytesReader(responseWriter, request.Body, handler.maxUploadBytes+1024*1024)
+	request.Body = http.MaxBytesReader(responseWriter, request.Body, handler.maxUploadBytes)
 	if err := request.ParseMultipartForm(handler.maxUploadBytes); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return nil, "", errUploadTooLarge
 		}
 		return nil, "", err
 	}
+	fmt.Println(len(request.MultipartForm.File))
+	if len(request.MultipartForm.File) != 1 {
+		return nil, "", errMultipleFiles
+	}
 	files := request.MultipartForm.File["document"]
 	if len(files) == 0 {
 		return nil, "", errors.New("missing document upload")
+	}
+	if len(files) > 1 {
+		return nil, "", errMultipleFiles
 	}
 	file, err := files[0].Open()
 	if err != nil {

@@ -221,6 +221,8 @@ func (handler *Handler) requireSupportWithReturnTo(responseWriter http.ResponseW
 
 var errArchiveTooLarge = errors.New("archive upload is too large")
 
+var errMultipleFiles = errors.New("More than one file oploaded")
+
 func (handler *Handler) readArchive(responseWriter http.ResponseWriter, request *http.Request) ([]byte, error) {
 	request.Body = http.MaxBytesReader(responseWriter, request.Body, handler.maxUploadBytes+1024*1024)
 	if err := request.ParseMultipartForm(handler.maxUploadBytes); err != nil {
@@ -232,6 +234,9 @@ func (handler *Handler) readArchive(responseWriter http.ResponseWriter, request 
 	files := request.MultipartForm.File["archive"]
 	if len(files) == 0 {
 		return nil, errors.New("missing archive upload")
+	}
+	if len(files) > 1 || len(request.MultipartForm.File) > 1 {
+		return nil, errMultipleFiles
 	}
 	file, err := files[0].Open()
 	if err != nil {
