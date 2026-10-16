@@ -25,6 +25,7 @@ import (
 	"github.com/bootdotdev/learn-web-security/internal/imagepreview"
 	"github.com/bootdotdev/learn-web-security/internal/integrations/pawpal"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
+	"github.com/bootdotdev/learn-web-security/internal/observability"
 	"github.com/bootdotdev/learn-web-security/internal/orders"
 	"github.com/bootdotdev/learn-web-security/internal/reviews"
 	"github.com/bootdotdev/learn-web-security/internal/storage"
@@ -126,7 +127,19 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		filepath.Join(options.DataDirectory, "bulk-tax-documents"),
 		options.MaxUploadBytes,
 	)
-	authenticationHandler := newAuthHandler(accountStore, mfaStore, passwordResetStore, renderer, logger, options.AppOrigin)
+	failedLoginAlert := observability.NewAuthAlertThreshold("failed_logins", 3, 5*time.Minute, logger)
+	resetPasswordAlert := observability.NewAuthAlertThreshold("password_reset_requests", 3, 10*time.Minute, logger)
+	authenticationHandler := newAuthHandler(
+		accountStore,
+		mfaStore,
+		passwordResetStore,
+		renderer,
+		logger,
+		options.AppOrigin,
+		options.TrustedProxyHops,
+		failedLoginAlert,
+		resetPasswordAlert,
+	)
 	passkeyHandler, err := passkeys.NewHandler(
 		options.AppOrigin,
 		accountStore,
@@ -252,8 +265,8 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 	dynamicMux.Handle("POST /login/totp",
 		applyMiddleware(
 			http.HandlerFunc(authenticationHandler.TOTPLogin),
-			parseForm(options.MaxRequestBodyBytes, renderer),
 			fixedWindowRateLimiter(loginRateLimiteOptions),
+			parseForm(options.MaxRequestBodyBytes, renderer),
 		))
 	dynamicMux.HandleFunc("POST /login/totp/cancel", authenticationHandler.CancelTOTPLogin)
 	dynamicMux.HandleFunc("GET /signup", authenticationHandler.SignupPage)
@@ -340,9 +353,15 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 	mainMux.Handle("GET /product-photos/{filename}", staticHandler)
 	mainMux.HandleFunc("POST /integrations/pawpal/webhook", pawPalHandler.Webhook)
 	mainMux.Handle("/", dynamicHandler)
+	mainMux.HandleFunc("GET /.well-known/security.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fmt.Sprintf("Contact: mailto:security@bearlysecure.example\nPolicy: https://bearlysecure.example/security-policy\nExpires: %s", time.Now().Add(time.Hour*24*180).Format(time.RFC3339))))
+	})
 
 	handler := applyMiddleware(
 		mainMux,
+		AppendRequestID,
 		securityHeaders,
 		recoverPanics(logger, renderer),
 	)

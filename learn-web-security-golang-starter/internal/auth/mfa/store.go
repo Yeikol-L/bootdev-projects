@@ -130,8 +130,8 @@ func verifyAt(code, secret string, timestamp time.Time) bool {
 
 func (store *Store) VerifyAndConsume(ctx context.Context, userID int64, code, secret string) (bool, error) {
 	now := store.now()
-	if !verifyAt(code, secret, store.now()) {
-		return false, errors.New("Codigo no válido")
+	if !verifyAt(code, secret, now) {
+		return false, nil
 	}
 	currentTime := now.Unix() / totpPeriodSeconds
 	result, err := store.queries.ConsumeTOTPStep(ctx, dbgen.ConsumeTOTPStepParams{TimeStep: &currentTime, UserID: userID})
