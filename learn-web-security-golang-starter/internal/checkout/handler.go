@@ -1,6 +1,7 @@
 package checkout
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -113,6 +114,11 @@ func (handler *Handler) Submit(responseWriter http.ResponseWriter, request *http
 		Region:     shippingDetails.Region,
 		PostalCode: shippingDetails.PostalCode,
 	}, handler.fulfillmentDelay)
+	if errors.Is(err, context.DeadlineExceeded) {
+		responseWriter.Header().Add("Retry-After", "1")
+		handler.renderCheckoutError(responseWriter, request, http.StatusServiceUnavailable, current, items, "Shipping is temporarily unavailable. Try again shortly.")
+		return
+	}
 	if err != nil {
 		handler.internalError(responseWriter, request, err)
 		return

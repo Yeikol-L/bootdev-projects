@@ -12,6 +12,7 @@ import (
 	"github.com/bootdotdev/learn-web-security/internal/auth/passwords"
 	"github.com/bootdotdev/learn-web-security/internal/auth/returnto"
 	"github.com/bootdotdev/learn-web-security/internal/auth/sessions"
+	"github.com/bootdotdev/learn-web-security/internal/botdetection"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
 	"github.com/bootdotdev/learn-web-security/internal/templates"
@@ -152,7 +153,12 @@ func (handler *authHandler) SignupPage(responseWriter http.ResponseWriter, reque
 }
 
 func (handler *authHandler) Signup(responseWriter http.ResponseWriter, request *http.Request) {
+	blocked := botdetection.ProtectSignup(responseWriter, request, handler.renderer)
+	if blocked {
+		return
+	}
 	_, current, err := sessions.Current(request, handler.accounts)
+
 	if err != nil {
 		handler.internalError(responseWriter, request, err)
 		return

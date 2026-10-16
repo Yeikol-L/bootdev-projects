@@ -118,9 +118,26 @@ func recoverPanics(logger *logging.Logger, renderer *templates.Renderer) middlew
 	}
 }
 
-func LoadShedder(_ int, _ int) func(http.Handler) http.Handler {
+func LoadShedder(cap int, delay int) func(http.Handler) http.Handler {
+	if cap <= 0 || delay <= 0 {
+		panic("Cap or delay cant be negative")
+	}
+
+	limit := strconv.Itoa(cap)
+	retry := strconv.Itoa(delay)
 	return func(next http.Handler) http.Handler {
-		return next
+		bufferChan := make(chan struct{}, cap)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-In-Flight-Limit", limit)
+			select {
+			case bufferChan <- struct{}{}:
+				defer func() { <-bufferChan }()
+				next.ServeHTTP(w, r)
+			default:
+				w.Header().Add("Retry-After", retry)
+				httpx.RespondWithJSON(w, 503, map[string]any{"error": "Service is at capacity"})
+			}
+		})
 	}
 }
 

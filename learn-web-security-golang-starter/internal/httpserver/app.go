@@ -323,7 +323,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		}
 	})
 
-	dynamicHandler := sourceValidation(options.AppOrigin, renderer)(globalRateLimiter(productCors(dynamicMux)))
+	dynamicHandler := sourceValidation(options.AppOrigin, renderer)(LoadShedder(50, 1)(globalRateLimiter(productCors(dynamicMux))))
 
 	mainMux := http.NewServeMux()
 	mainMux.HandleFunc("GET /health", func(responseWriter http.ResponseWriter, _ *http.Request) {
