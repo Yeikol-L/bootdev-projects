@@ -15,6 +15,7 @@ import (
 	"github.com/bootdotdev/learn-web-security/internal/botdetection"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
+	"github.com/bootdotdev/learn-web-security/internal/observability"
 	"github.com/bootdotdev/learn-web-security/internal/templates"
 )
 
@@ -29,22 +30,36 @@ type authPage struct {
 }
 
 type authHandler struct {
-	accounts       *accounts.Store
-	renderer       *templates.Renderer
-	logger         *logging.Logger
-	mfa            *mfa.Store
-	passwordResets *passwordreset.Store
-	appOrigin      string
+	accounts           *accounts.Store
+	renderer           *templates.Renderer
+	logger             *logging.Logger
+	mfa                *mfa.Store
+	passwordResets     *passwordreset.Store
+	appOrigin          string
+	hopsCount          int
+	failedLoginsAlert  *observability.AuthAlertThreshold
+	passwordResetAlert *observability.AuthAlertThreshold
 }
 
-func newAuthHandler(accountStore *accounts.Store, mfaStore *mfa.Store, passwordResetStore *passwordreset.Store, renderer *templates.Renderer, logger *logging.Logger, appOrigin string) *authHandler {
+func newAuthHandler(accountStore *accounts.Store,
+	mfaStore *mfa.Store,
+	passwordResetStore *passwordreset.Store,
+	renderer *templates.Renderer,
+	logger *logging.Logger,
+	appOrigin string,
+	hopCount int,
+	loginAlert, passwordResetAlert *observability.AuthAlertThreshold,
+) *authHandler {
 	return &authHandler{
-		accounts:       accountStore,
-		renderer:       renderer,
-		logger:         logger,
-		mfa:            mfaStore,
-		passwordResets: passwordResetStore,
-		appOrigin:      appOrigin,
+		accounts:           accountStore,
+		renderer:           renderer,
+		logger:             logger,
+		mfa:                mfaStore,
+		passwordResets:     passwordResetStore,
+		appOrigin:          appOrigin,
+		hopsCount:          hopCount,
+		failedLoginsAlert:  loginAlert,
+		passwordResetAlert: passwordResetAlert,
 	}
 }
 
@@ -60,6 +75,8 @@ func (handler *authHandler) LoginPage(responseWriter http.ResponseWriter, reques
 }
 
 func (handler *authHandler) Login(responseWriter http.ResponseWriter, request *http.Request) {
+	reqID, _ := GetRequestID(request)
+	reqIP := clientIPKeyWithTrustedProxies(handler.hopsCount)(request)
 	email, err := httpx.FormValue(request, "email")
 	if err != nil {
 		handler.invalidForm(responseWriter)
@@ -84,6 +101,7 @@ func (handler *authHandler) Login(responseWriter http.ResponseWriter, request *h
 		return
 	}
 	if !found || !passwords.Verify(password, user.PasswordHash) {
+		handler.failedLoginsAlert.Record(reqID, reqIP, user.ID)
 		handler.logAuthenticationEvent(request, "login_attempt", map[string]any{
 			"email":         email,
 			"success":       false,
@@ -294,7 +312,23 @@ func (handler *authHandler) internalError(responseWriter http.ResponseWriter, re
 	}
 }
 
-func (handler *authHandler) logAuthenticationEvent(_ *http.Request, eventName string, fields map[string]any) {
+func (handler *authHandler) logAuthenticationEvent(r *http.Request, eventName string, fields map[string]any) {
+	reqID, ok := GetRequestID(r)
+	if ok {
+		fields["requestId"] = reqID.String()
+	}
+	sourceIP := clientIPKeyWithTrustedProxies(handler.hopsCount)(r)
+	fields["sourceIp"] = sourceIP
+	_, ok = fields["userId"]
+	if !ok {
+		fields["userId"] = nil
+	}
+	outcome := "success"
+	success, ok := fields["success"].(bool)
+	if !success || !ok {
+		outcome = "failure"
+	}
+	fields["outcome"] = outcome
 	_ = handler.logger.Event(eventName, fields)
 }
 

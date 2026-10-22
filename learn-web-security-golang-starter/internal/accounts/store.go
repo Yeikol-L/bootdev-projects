@@ -60,7 +60,10 @@ type Store struct {
 func NewStore(database *sql.DB) *Store {
 	return &Store{queries: dbgen.New(database), now: time.Now, random: rand.Reader}
 }
-
+func (store *Store) RevokeAllActiveSessions(ctx context.Context) (int, error) {
+	deleted, err := store.queries.RevokeAllActiveSessions(ctx)
+	return int(deleted), err
+}
 func (store *Store) FindUserByEmail(ctx context.Context, email string) (User, bool, error) {
 	row, err := store.queries.GetUserByEmail(ctx, email)
 	if err != nil {

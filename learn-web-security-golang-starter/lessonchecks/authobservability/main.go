@@ -236,7 +236,15 @@ func checkAuthenticationObservability(ctx context.Context, applicationHandler ht
 	for _, observation := range requestObservations {
 		requestIDs = append(requestIDs, observation.RequestID)
 	}
-
+	fmt.Printf("unknownLogin.StatusCode == http.StatusUnauthorized %v\n", unknownLogin.StatusCode == http.StatusUnauthorized)
+	fmt.Printf("knownFailedLogin.StatusCode == http.StatusUnauthorized %v\n", knownFailedLogin.StatusCode == http.StatusUnauthorized)
+	fmt.Printf("successfulLogin.StatusCode == http.StatusFound %v\n", successfulLogin.StatusCode == http.StatusFound)
+	fmt.Printf("totpPasswordStep.StatusCode == http.StatusFound %v\n", totpPasswordStep.StatusCode == http.StatusFound)
+	fmt.Printf("failedTOTPLogin.StatusCode: %v, http.StatusUnauthorized: %v\n", failedTOTPLogin.StatusCode, http.StatusUnauthorized)
+	fmt.Printf("failedTOTPLogin.StatusCode == http.StatusUnauthorized %v\n", failedTOTPLogin.StatusCode == http.StatusUnauthorized)
+	fmt.Printf("successfulTOTPLogin.StatusCode == http.StatusFound %v\n", successfulTOTPLogin.StatusCode == http.StatusFound)
+	fmt.Printf("knownResetRequest.StatusCode == http.StatusOK %v\n", knownResetRequest.StatusCode == http.StatusOK)
+	fmt.Printf("unknownResetRequest.StatusCode == http.Status %v\n", unknownResetRequest.StatusCode == http.StatusOK)
 	return checkResult{
 		AuthenticationStatusesValid: unknownLogin.StatusCode == http.StatusUnauthorized &&
 			knownFailedLogin.StatusCode == http.StatusUnauthorized &&

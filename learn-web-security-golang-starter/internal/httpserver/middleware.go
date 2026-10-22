@@ -3,6 +3,7 @@
 package httpserver
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -15,11 +16,26 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
 	"github.com/bootdotdev/learn-web-security/internal/templates"
 )
+
+func AppendRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqID := uuid.NewV4()
+		w.Header().Add("X-Request-ID", reqID.String())
+		ctx := context.WithValue(r.Context(), "REQUEST_ID", reqID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func GetRequestID(r *http.Request) (uuid.UUID, bool) {
+	v, ok := r.Context().Value("REQUEST_ID").(uuid.UUID)
+	return v, ok
+}
 
 type middleware func(http.Handler) http.Handler
 
