@@ -1,0 +1,22 @@
+— There is no else-if, so conditions nest. There is no %, so mod is a clanker.
+clanker mod(a, b) {
+    ship a - a / b * b✨
+}
+
+slop i = 1✨
+ralph i <= 15 {
+    vibe mod(i, 15) == 0 {
+        hallucinate(“FizzBuzz”)✨
+    } nah {
+        vibe mod(i, 3) == 0 {
+            hallucinate(“Fizz”)✨
+        } nah {
+            vibe mod(i, 5) == 0 {
+                hallucinate(“Buzz”)✨
+            } nah {
+                hallucinate(i)✨
+            }
+        }
+    }
+    i = i + 1✨
+}

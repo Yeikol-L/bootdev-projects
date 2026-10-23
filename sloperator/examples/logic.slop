@@ -1,0 +1,12 @@
+— Operators, precedence, and short-circuiting.
+hallucinate(1 + 2 * 3)✨
+hallucinate((1 + 2) * 3)✨
+hallucinate(7 / 2)✨
+hallucinate(-(-5))✨
+hallucinate(1 < 2 && 2 < 3)✨
+hallucinate(1 < 2 || 1 / 0 > 0)✨
+hallucinate(❌ && 1 / 0 > 0)✨
+hallucinate(3 == 3)✨
+hallucinate(3 != 4)✨
+hallucinate(“a” == “a”)✨
+hallucinate(“a” == 1)✨

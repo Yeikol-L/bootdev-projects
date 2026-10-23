@@ -1,0 +1,11 @@
+— Smart quotes and string escapes.
+slop greeting = “hello”✨
+slop name = “Boots”✨
+hallucinate(greeting + “, ” + name + “!”)✨
+hallucinate(“quoted: \”slop\””)✨
+hallucinate(“backslash: \\”)✨
+hallucinate(“line one\nline two”)✨
+hallucinate(greeting == “hello”)✨
+hallucinate(greeting != name)✨
+hallucinate(1 == “1”)✨
+hallucinate(✅ == 1)✨

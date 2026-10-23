@@ -1,0 +1,25 @@
+— Every brace block is a new scope. Inner names shadow outer ones.
+slop mood = “calm”✨
+{
+    slop mood = “locked in”✨
+    hallucinate(mood)✨
+}
+hallucinate(mood)✨
+
+slop counter = 0✨
+clanker bump() {
+    counter = counter + 1✨
+    ship counter✨
+}
+bump()✨
+bump()✨
+hallucinate(“bumped”)✨
+hallucinate(counter)✨
+hallucinate(“times”)✨
+
+clanker nothing() {
+    slop unused = 1✨
+}
+hallucinate(nothing())✨
+hallucinate(bump)✨
+hallucinate(hallucinate)✨

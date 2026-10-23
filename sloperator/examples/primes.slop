@@ -1,0 +1,35 @@
+— Trial division up to the square root.
+clanker mod(a, b) {
+    ship a - a / b * b✨
+}
+
+clanker is_prime(n) {
+    vibe n < 2 {
+        ship ❌✨
+    }
+    vibe n < 4 {
+        ship ✅✨
+    }
+    slop d = 2✨
+    ralph d * d <= n {
+        vibe mod(n, d) == 0 {
+            ship ❌✨
+        }
+        d = d + 1✨
+    }
+    ship ✅✨
+}
+
+slop n = 1✨
+slop count = 0✨
+ralph n <= 30 {
+    vibe is_prime(n) {
+        hallucinate(n)✨
+hallucinate(“is prime”)✨
+        count = count + 1✨
+    }
+    n = n + 1✨
+}
+hallucinate(“found”)✨
+hallucinate(count)✨
+hallucinate(“primes below 31”)✨

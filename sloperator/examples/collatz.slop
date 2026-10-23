@@ -1,0 +1,24 @@
+— Division truncates, so n / 2 * 2 == n is an even check.
+clanker is_even(n) {
+    ship n / 2 * 2 == n✨
+}
+
+clanker collatz_steps(n) {
+    slop steps = 0✨
+    ralph n != 1 {
+        vibe is_even(n) {
+            n = n / 2✨
+        } nah {
+            n = 3 * n + 1✨
+        }
+        steps = steps + 1✨
+    }
+    ship steps✨
+}
+
+hallucinate(“27 takes”)✨
+hallucinate(collatz_steps(27))✨
+hallucinate(“steps”)✨
+hallucinate(“97 takes”)✨
+hallucinate(collatz_steps(97))✨
+hallucinate(“steps”)✨

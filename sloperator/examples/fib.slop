@@ -1,0 +1,31 @@
+— Fibonacci two ways: recursive and with a ralph loop.
+clanker fib(n) {
+    vibe n < 2 {
+        ship n✨
+    }
+    ship fib(n - 1) + fib(n - 2)✨
+}
+
+clanker fib_loop(n) {
+    slop a = 0✨
+    slop b = 1✨
+    slop i = 0✨
+    ralph i < n {
+        slop next = a + b✨
+        a = b✨
+        b = next✨
+        i = i + 1✨
+    }
+    ship a✨
+}
+
+slop i = 0✨
+ralph i <= 10 {
+    hallucinate(“fib”)✨
+hallucinate(i)✨
+hallucinate(“=”)✨
+hallucinate(fib(i))✨
+    i = i + 1✨
+}
+hallucinate(“fib_loop(50) =”)✨
+hallucinate(fib_loop(50))✨

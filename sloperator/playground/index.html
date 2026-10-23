@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SlopLang Playground</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 1.5rem;
+        background: #f6f6f4;
+        color: #222;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 1rem;
+      }
+      .toolbar {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .toolbar span {
+        color: #666;
+        font-size: 0.9rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.4rem 0.8rem;
+        border: 1px solid #bbb;
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+      }
+      button.insert {
+        font-size: 1.1rem;
+        padding: 0.2rem 0.6rem;
+      }
+      #run {
+        background: #2f6fed;
+        color: #fff;
+        border-color: #2f6fed;
+        font-weight: 600;
+      }
+      textarea,
+      pre {
+        width: 100%;
+        box-sizing: border-box;
+        font:
+          15px/1.45 ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
+      }
+      textarea {
+        height: 22rem;
+        padding: 0.75rem;
+        border: 1px solid #bbb;
+        border-radius: 6px;
+        resize: vertical;
+      }
+      pre {
+        min-width: 800px;
+        min-height: 6rem;
+        margin: 0.75rem 0 0;
+        padding: 0.75rem;
+        border-radius: 6px;
+        background: #1e1e1e;
+        color: #e6e6e6;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      pre .err {
+        color: #ff8a80;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SlopLang Playground</h1>
+    <div class="toolbar">
+      <button id="run">Run</button>
+      <span>Ctrl/Cmd + Enter</span>
+      <span>·</span>
+      <span>insert:</span>
+      <button class="insert" data-text="✨">✨</button>
+      <button class="insert" data-text="“”">“ ”</button>
+      <button class="insert" data-text="— ">—</button>
+      <button class="insert" data-text="✅">✅</button>
+      <button class="insert" data-text="❌">❌</button>
+    </div>
+    <textarea id="source" spellcheck="false">
+— Comments start with an em dash. Statements end with sparkles.
+clanker describe(count) {
+    vibe count > 1 {
+        ship “big slop”✨
+    } nah {
+        ship “small slop”✨
+    }
+}
+
+loadbearing MAX = 3✨
+slop count = 0✨
+
+ralph count < MAX {
+    hallucinate(describe(count))✨
+    count = count + 1✨
+}
+</textarea>
+    <pre id="output">Press Run.</pre>
+    <script>
+      const source = document.getElementById("source");
+      const output = document.getElementById("output");
+
+      async function run() {
+        output.textContent = "Running…";
+        try {
+          const response = await fetch("/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: source.value }),
+          });
+          const result = await response.json();
+          if (result.stderr) {
+            output.textContent = "";
+            return;
+          }
+          output.textContent = result.stdout;
+          if (result.stderr) {
+            const err = document.createElement("span");
+            err.className = "err";
+            err.textContent = result.stderr;
+            output.appendChild(err);
+          }
+          if (!result.stdout && !result.stderr) {
+            output.textContent = "(no output)";
+          }
+        } catch (error) {
+          output.textContent =
+            "Could not reach the playground server: " + error;
+        }
+      }
+
+      document.getElementById("run").addEventListener("click", run);
+      source.addEventListener("keydown", (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+          event.preventDefault();
+          run();
+        }
+      });
+      for (const button of document.querySelectorAll("button.insert")) {
+        button.addEventListener("click", () => {
+          const text = button.dataset.text;
+          const start = source.selectionStart;
+          const end = source.selectionEnd;
+          source.setRangeText(text, start, end, "end");
+          if (text === "“”") source.setSelectionRange(start + 1, start + 1);
+          source.focus();
+        });
+      }
+    </script>
+  </body>
+</html>

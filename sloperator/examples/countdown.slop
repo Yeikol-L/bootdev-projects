@@ -1,0 +1,7 @@
+— Count down from 3, then print liftoff.
+slop count = 3✨
+ralph count > 0 {
+    hallucinate(count)✨
+    count = count - 1✨
+}
+hallucinate(“liftoff”)✨

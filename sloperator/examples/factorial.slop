@@ -1,0 +1,14 @@
+— Recursion and arbitrary-precision numbers.
+clanker factorial(n) {
+    vibe n <= 1 {
+        ship 1✨
+    }
+    ship n * factorial(n - 1)✨
+}
+
+hallucinate(“5! =”)✨
+hallucinate(factorial(5))✨
+hallucinate(“20! =”)✨
+hallucinate(factorial(20))✨
+hallucinate(“25! =”)✨
+hallucinate(factorial(25))✨
